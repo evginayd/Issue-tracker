@@ -22,12 +22,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-//create the form schema
-const formSchema = z.object({
-  name: z.string().min(2).max(50),
-  email: z.string().min(2).max(50),
-  password: z.string().min(6).max(50),
-});
+import { formSchema } from "@/lib/auth-schema";
 
 export default function SignUp() {
   //define the form
@@ -95,7 +90,9 @@ export default function SignUp() {
                 </FormItem>
               )}
             />
-            <Button type="submit">Submit</Button>
+            <Button type="submit" className="w-full">
+              Submit
+            </Button>
           </form>
         </Form>
       </CardContent>
