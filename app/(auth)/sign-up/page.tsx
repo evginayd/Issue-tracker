@@ -23,6 +23,8 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { formSchema } from "@/lib/auth-schema";
+import { authClient } from "@/lib/auth-client";
+import { toast } from "sonner";
 
 export default function SignUp() {
   //define the form
@@ -36,8 +38,27 @@ export default function SignUp() {
   });
 
   //define a submit handler
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    console.log(values);
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    const { name, email, password } = values;
+    const { data, error } = await authClient.signUp.email(
+      {
+        email,
+        password,
+        name,
+        callbackURL: "/sign-in",
+      },
+      {
+        onRequest: (ctx) => {
+          toast("Signing up...");
+        },
+        onSuccess: (ctx) => {
+          form.reset();
+        },
+        onError: (ctx) => {
+          alert(ctx.error.message);
+        },
+      }
+    );
   }
   return (
     <Card className="w-full max-w-md mx-auto">
