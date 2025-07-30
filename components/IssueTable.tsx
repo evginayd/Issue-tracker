@@ -143,6 +143,25 @@ export default function IssueTable({ session }: Props) {
     router.push(`/issues/new?projectId=${projectId}`);
   };
 
+  const handleDelete = async (issueId: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this issue?"
+    );
+    if (!confirmed) return;
+
+    const res = await fetch(`/api/issues/${issueId}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      console.error("Delete failed:", data.error);
+    } else {
+      // Silme başarılıysa sayfayı yenile
+      window.location.reload();
+    }
+  };
+
   if (!projectId) {
     return (
       <div className="w-full p-6 max-w-5xl mx-auto text-center text-gray-500">
@@ -223,19 +242,32 @@ export default function IssueTable({ session }: Props) {
                 <TableCell>{issue.assignedBy.name}</TableCell>
                 <TableCell>{issue.assignee?.name || "Not assigned"}</TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-3">
+                  <div className="flex gap-2 justify-end flex-wrap">
                     <Link
-                      href={`/issues/${issue.id}/edit`}
-                      className="text-blue-600 hover:underline"
+                      href={`/issues/${issue.id}?projectId=${issue.projectId}`}
                     >
-                      Edit
+                      <Button variant="secondary" size="sm">
+                        View Issue
+                      </Button>
                     </Link>
-                    <button
-                      className="text-red-600 hover:underline"
-                      onClick={() => toast.error("Delete not implemented yet")}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        router.push(
+                          `/issues/code-editor?projectId=${projectId}&issueId=${issue.id}`
+                        )
+                      }
+                    >
+                      Edit Code
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDelete(issue.id)}
                     >
                       Delete
-                    </button>
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

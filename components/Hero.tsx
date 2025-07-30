@@ -26,9 +26,9 @@ export default async function HeroSection() {
         {/* Butonlar */}
         <div className="mt-8 flex justify-center gap-4">
           {session ? (
-            <Link href="/issues" className={buttonVariants({ size: "lg" })}>
+            <Link href="/home" className={buttonVariants({ size: "lg" })}>
               <TriangleAlert className="w-4 h-4 mr-2" />
-              Go to Issues
+              Go to Projects
             </Link>
           ) : (
             <Link href="/sign-in" className={buttonVariants({ size: "lg" })}>

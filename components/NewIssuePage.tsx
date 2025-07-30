@@ -76,7 +76,7 @@ export default function NewIssuePage({ session }: Props) {
     dueDate: "",
     labels: [],
     projectId: projectId || "",
-    assignedById: session?.user?.id || "", // Oturum açmış kullanıcının ID'si
+    assignedById: session?.user?.id || "",
     assigneeId: "",
   });
 
@@ -86,12 +86,25 @@ export default function NewIssuePage({ session }: Props) {
     console.log("AssignedById:", formData.assignedById);
 
     if (!projectId) {
-      toast.error("No project ID provided");
+      toast.error(
+        "No project selected. Please select a project to create an issue."
+      );
+      router.push("/home");
       return;
     }
     if (!session || !session.user?.id) {
       toast.error("Please sign in to create an issue");
       return;
+    }
+
+    // sessionStorage'dan kod snippet'ini al
+    const savedCode = sessionStorage.getItem("codeSnippet");
+    if (savedCode) {
+      setFormData((prev) => ({
+        ...prev,
+        description: (prev.description || "") + "\n" + savedCode,
+      }));
+      sessionStorage.removeItem("codeSnippet"); // Tek kullanımlık, temizle
     }
 
     async function fetchUsers() {
@@ -157,7 +170,7 @@ export default function NewIssuePage({ session }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
-          assignedById: session.user.id, // Güvenli olsun diye burada da set ediyorum
+          assignedById: session.user.id,
         }),
         credentials: "include",
       });
@@ -174,10 +187,6 @@ export default function NewIssuePage({ session }: Props) {
       toast.error("Unexpected error: " + error);
     }
   };
-
-  if (!projectId) {
-    return toast.error("No project ID provided");
-  }
 
   if (!session || !session.user?.id) {
     return (
@@ -222,7 +231,8 @@ export default function NewIssuePage({ session }: Props) {
             name="description"
             value={formData.description || ""}
             onChange={handleChange}
-            placeholder="Enter issue description"
+            placeholder="Enter issue description (Markdown supported)"
+            className="min-h-[200px]"
           />
         </div>
 
@@ -333,7 +343,7 @@ export default function NewIssuePage({ session }: Props) {
         </div>
 
         <div className="flex gap-2 mt-4">
-          <Button type="submit" className="flex items-center gap-2">
+          <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
             Create Issue
           </Button>
         </div>

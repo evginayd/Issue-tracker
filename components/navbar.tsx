@@ -51,12 +51,12 @@ export default async function Navbar() {
               </Link>
             </Button>
 
-            <Button variant="ghost" className="flex items-center gap-2" asChild>
+            {/* <Button variant="ghost" className="flex items-center gap-2" asChild>
               <Link href="/issues">
                 <TriangleAlert size={16} className="w-4 h-4" />
                 <span className="hidden lg:inline">Issues</span>
               </Link>
-            </Button>
+            </Button> */}
           </>
         )}
 

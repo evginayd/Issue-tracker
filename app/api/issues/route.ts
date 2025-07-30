@@ -87,101 +87,65 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  console.log("Session in POST /api/issues:", JSON.stringify(session, null, 2));
-
-  if (!session || !session.user?.id) {
-    return NextResponse.json(
-      { error: "Unauthorized: Session or user ID missing" },
-      { status: 403 }
-    );
-  }
-
   try {
-    const body = await request.json();
-    console.log("POST body:", JSON.stringify(body, null, 2));
-    const {
-      title,
-      description,
-      status,
-      priority,
-      category,
-      dueDate,
-      labels,
-      projectId,
-      assignedById,
-      assigneeId,
-    } = body;
+    const { title, description, projectId, assignedById, codeSnippetId } =
+      await request.json();
 
     if (!title || !projectId || !assignedById) {
       return NextResponse.json(
-        { error: "Title, projectId, and assignedById are required" },
+        { error: "Missing required fields" },
         { status: 400 }
       );
     }
 
-    // Kullanıcının proje ile ilişkisini kontrol et
+    // Check project existence
     const project = await prisma.project.findUnique({
       where: { id: projectId },
-      select: {
-        managerId: true,
-        members: {
-          select: { userId: true },
-        },
-      },
     });
-
     if (!project) {
-      return NextResponse.json(
-        { error: "Invalid projectId: Project not found" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const isManager = project.managerId === session.user.id;
-    const isMember = project.members.some(
-      (member) => member.userId === session.user.id
-    );
-
-    if (!isManager && !isMember) {
-      console.log(
-        `User ${session.user.id} is not authorized to create issues for project ${projectId}`
-      );
-      return NextResponse.json(
-        {
-          error:
-            "Unauthorized: User is not a manager or member of this project",
-        },
-        { status: 403 }
-      );
+    // Check user existence
+    const user = await prisma.user.findUnique({
+      where: { id: assignedById },
+    });
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Check CodeSnippet (optional)
+    if (codeSnippetId) {
+      const codeSnippet = await prisma.codeSnippet.findUnique({
+        where: { id: codeSnippetId },
+      });
+      if (!codeSnippet) {
+        return NextResponse.json(
+          { error: "Code snippet not found" },
+          { status: 404 }
+        );
+      }
+    }
+
+    // Create Issue
     const issue = await prisma.issue.create({
       data: {
         title,
         description,
-        status,
-        priority,
-        category,
-        dueDate: dueDate ? new Date(dueDate) : undefined,
-        labels: labels || [],
         projectId,
         assignedById,
-        assigneeId: assigneeId || null,
-      },
-      include: {
-        project: { select: { id: true, name: true } },
-        assignedBy: { select: { id: true, name: true } },
-        assignee: { select: { id: true, name: true } },
+        codeSnippetId: codeSnippetId || null,
+        status: "OPEN",
+        priority: "MEDIUM",
+        category: "DESIGN",
       },
     });
 
-    console.log("Created issue:", JSON.stringify(issue, null, 2));
     return NextResponse.json(issue, { status: 201 });
-  } catch (error: unknown) {
-    console.error("Create issue error:", error);
+  } catch (error) {
+    console.error("Error creating issue:", error);
     return NextResponse.json(
-      { error: "Failed to create issue: " + String(error) },
+      { error: "Failed to create issue" },
       { status: 500 }
     );
   }
