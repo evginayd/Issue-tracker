@@ -1,8 +1,8 @@
 import {
   FolderOpenDot,
   HomeIcon,
+  IdCardLanyard,
   NotebookPen,
-  TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
 import { Button, buttonVariants } from "./ui/button";
@@ -50,6 +50,19 @@ export default async function Navbar() {
                 <span className="hidden lg:inline">Projects</span>
               </Link>
             </Button>
+
+            {session.user.role === "MANAGER" && (
+              <Button
+                variant="ghost"
+                className="flex items-center gap-2"
+                asChild
+              >
+                <Link href="/users">
+                  <IdCardLanyard size={16} className="w-4 h-4" />
+                  <span className="hidden lg:inline">Users</span>
+                </Link>
+              </Button>
+            )}
 
             {/* <Button variant="ghost" className="flex items-center gap-2" asChild>
               <Link href="/issues">

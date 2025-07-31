@@ -1,11 +1,13 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import hljs from "highlight.js";
-import "highlight.js/styles/github.css"; // Use github style for light theme
+import "highlight.js/styles/github.css";
 import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
+import "../app/globals.css";
 
 interface CodeEditorProps {
   code: string;
@@ -15,7 +17,6 @@ interface CodeEditorProps {
   readOnly?: boolean;
 }
 
-// Dynamically import Monaco Editor to avoid SSR issues
 const Editor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
 const CodeEditor = ({
@@ -27,7 +28,12 @@ const CodeEditor = ({
 }: CodeEditorProps) => {
   const router = useRouter();
   const [code, setCode] = useState(defaultCode.trim());
-  const [language] = useState("javascript"); // Fixed for simplicity, can add Select later
+  const [language] = useState("javascript");
+  const editorRef = useRef<
+    import("monaco-editor").editor.IStandaloneCodeEditor | null
+  >(null);
+  const decorationsRef = useRef<string[]>([]);
+  const changedRangesRef = useRef<import("monaco-editor").Range[]>([]);
 
   useEffect(() => {
     if (!readOnly) {
@@ -49,10 +55,38 @@ const CodeEditor = ({
     }
   }, [projectId, session, router, issueId, readOnly]);
 
-  const handleOnChange = (value?: string) => {
-    if (!readOnly) {
-      console.log("Code changed:", value);
-      setCode(value || "");
+  const handleOnChange = (
+    value: string | undefined,
+    event: import("monaco-editor").editor.IModelContentChangedEvent
+  ) => {
+    if (!readOnly && value !== undefined && editorRef.current) {
+      setCode(value);
+
+      const changes = event.changes;
+      const newDecorations: import("monaco-editor").editor.IModelDeltaDecoration[] =
+        [];
+
+      changes.forEach((change) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const range = new (window as any).monaco.Range(
+          change.range.startLineNumber,
+          change.range.startColumn,
+          change.range.endLineNumber,
+          change.range.endColumn + change.text.length
+        );
+        changedRangesRef.current.push(range);
+        newDecorations.push({
+          range,
+          options: {
+            inlineClassName: "my-highlight",
+          },
+        });
+      });
+
+      decorationsRef.current = editorRef.current.deltaDecorations(
+        decorationsRef.current,
+        newDecorations
+      );
     }
   };
 
@@ -71,13 +105,6 @@ const CodeEditor = ({
       return;
     }
 
-    console.log("handleSave: session =", session);
-    console.log("handleSave: userId =", session.user.id);
-    console.log("handleSave: projectId =", projectId);
-    console.log("handleSave: issueId =", issueId);
-    console.log("handleSave: code =", code);
-    console.log("handleSave: language =", language);
-
     try {
       const response = await fetch("/api/code-snippets", {
         method: "POST",
@@ -93,7 +120,6 @@ const CodeEditor = ({
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.log("handleSave: error response =", errorData);
         throw new Error(errorData.error || "Failed to save code snippet");
       }
 
@@ -109,6 +135,35 @@ const CodeEditor = ({
       console.error("Error saving code snippet:", error);
       toast.error(`Failed to save code snippet: ${error}`);
     }
+  };
+
+  const handleEditorDidMount = async (
+    editor: import("monaco-editor").editor.IStandaloneCodeEditor
+  ) => {
+    editorRef.current = editor;
+
+    const monaco = await import("monaco-editor");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).monaco = monaco; // Store for Range access
+    monaco.editor.setTheme("vs-dark");
+
+    const style = document.createElement("style");
+    style.innerHTML = `
+      .my-highlight {
+        background-color: yellow !important;
+      }
+      pre.language-javascript code {
+        color: #1f2937 !important;
+      }
+      pre.language-javascript {
+        background-color: #f9fafb !important;
+      }
+      .dark pre.language-javascript {
+        background-color: #1f2937 !important;
+        color: #e5e7eb !important;
+      }
+    `;
+    document.head.appendChild(style);
   };
 
   if (!readOnly && !projectId) {
@@ -133,6 +188,8 @@ const CodeEditor = ({
     );
   }
 
+  const highlightedCode = hljs.highlight(code, { language }).value;
+
   return (
     <div className="grid grid-cols-2 gap-4 max-w-4xl mx-auto mt-12 p-6 rounded-2xl shadow-md border border-gray-200">
       <div>
@@ -153,16 +210,15 @@ const CodeEditor = ({
             readOnly,
           }}
           onChange={handleOnChange}
+          onMount={handleEditorDidMount}
         />
       </div>
       <div>
         <h2 className="text-lg font-semibold mb-2">Preview</h2>
-        <pre className="border p-4 rounded-md bg-gray-50 dark:bg-gray-800">
+        <pre className="border p-4 rounded-md bg-gray-50 dark:bg-gray-800 max-h-[400px] overflow-y-auto">
           <code
             className={`language-${language}`}
-            dangerouslySetInnerHTML={{
-              __html: hljs.highlight(code, { language }).value,
-            }}
+            dangerouslySetInnerHTML={{ __html: highlightedCode }}
           />
         </pre>
       </div>
@@ -171,7 +227,7 @@ const CodeEditor = ({
           <Button onClick={handleSave}>Save Snippet</Button>
           <Button
             variant="secondary"
-            onClick={() => router.push(`/issues/new?projectId=${projectId}`)}
+            onClick={() => router.push(`/issues/?projectId=${projectId}`)}
           >
             Cancel
           </Button>

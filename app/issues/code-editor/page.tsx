@@ -1,6 +1,5 @@
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
 import prisma from "@/lib/prisma";
 import CodeEditor from "@/components/CodeEditor";
 
@@ -12,8 +11,8 @@ export default async function CodeEditorPage({
   const session = await auth.api.getSession({
     headers: await headers(),
   });
-  const projectId = searchParams.projectId || "";
-  const issueId = searchParams.issueId || "";
+  const issueId = searchParams.issueId;
+  const projectId = searchParams?.projectId || "";
 
   console.log("CodeEditorPage: projectId =", projectId);
   console.log("CodeEditorPage: issueId =", issueId);

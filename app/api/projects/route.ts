@@ -7,7 +7,6 @@ import { Role } from "@prisma/client";
 // POST /api/projects
 export async function POST(req: Request) {
   try {
-    // Eğer senin auth paketin farklıysa bu kısmı kendi paketinle değiştir
     const session = await auth.api.getSession({
       headers: await headers(),
     });

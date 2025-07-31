@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ type Issue = {
   assignedById: string;
   codeSnippet: { id: string; content: string }[];
   assignedBy: User;
+  assignee: User[]; // Added for multiple assignees
 };
 
 type Props = {
@@ -59,10 +61,30 @@ type Props = {
 };
 
 export default function EditIssue({ session, issue }: Props) {
-  const [form, setForm] = useState<Issue>(issue);
+  const [form, setForm] = useState<Issue>({
+    ...issue,
+    assignee: issue.assignee || [],
+  });
   const [isEditing, setIsEditing] = useState(false);
+  const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const router = useRouter();
   const userRole = session?.user?.role?.toUpperCase();
+
+  // Fetch available users for assignment
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch(`/api/users?projectId=${issue.projectId}`);
+        if (!response.ok) throw new Error("Failed to fetch users");
+        const users: User[] = await response.json();
+        setAvailableUsers(users);
+      } catch (error) {
+        console.error("Fetch users error:", error);
+        toast.error("Failed to load users for assignment");
+      }
+    };
+    if (isEditing) fetchUsers();
+  }, [isEditing, issue.projectId]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -73,6 +95,33 @@ export default function EditIssue({ session, issue }: Props) {
 
   const handleSelectChange = (name: string, value: string) => {
     setForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleAssigneeChange = (index: number, userId: string) => {
+    const newAssignees = [...form.assignee];
+    newAssignees[index] = availableUsers.find((user) => user.id === userId)!;
+    setForm((prev) => ({ ...prev, assignee: newAssignees }));
+  };
+
+  const addAssignee = () => {
+    const available = availableUsers.find(
+      (user) => !form.assignee.some((a) => a.id === user.id)
+    );
+    if (available) {
+      setForm((prev) => ({
+        ...prev,
+        assignee: [...prev.assignee, available],
+      }));
+    } else {
+      toast.error("No more users available to assign");
+    }
+  };
+
+  const removeAssignee = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      assignee: prev.assignee.filter((_, i) => i !== index),
+    }));
   };
 
   const handleSubmit = async () => {
@@ -97,6 +146,7 @@ export default function EditIssue({ session, issue }: Props) {
           status: form.status,
           priority: form.priority,
           category: form.category,
+          assignee: form.assignee.map((a) => a.id), // Send assignee IDs
         }),
       });
 
@@ -123,7 +173,7 @@ export default function EditIssue({ session, issue }: Props) {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{issue.title}</h1>
         <div className="flex gap-2">
-          {userRole === "MANAGER" && !isEditing && (
+          {!isEditing && (
             <Button onClick={() => setIsEditing(true)}>Edit</Button>
           )}
           <Button asChild variant="secondary">
@@ -240,11 +290,68 @@ export default function EditIssue({ session, issue }: Props) {
         </div>
 
         <div>
+          <h2 className="text-lg font-semibold">Assignees</h2>
+          {form.assignee.length > 0 ? (
+            form.assignee.map((assignee, index) => (
+              <div key={index} className="flex items-center gap-2 mb-2">
+                {isEditing ? (
+                  <Select
+                    value={assignee.id}
+                    onValueChange={(value) =>
+                      handleAssigneeChange(index, value)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a user" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableUsers.length > 0 ? (
+                        availableUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.id}>
+                            {user.name || user.email}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="text-gray-500 p-2 text-sm">
+                          No users available
+                        </div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    {assignee.name || assignee.email}
+                  </p>
+                )}
+                {isEditing && form.assignee.length > 1 && (
+                  <button
+                    onClick={() => removeAssignee(index)}
+                    className="text-red-600 font-bold px-2"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-700 dark:text-gray-300">No assignees</p>
+          )}
+          {isEditing && (
+            <button
+              onClick={addAssignee}
+              className="mt-2 text-sm text-blue-600 hover:underline"
+            >
+              + Add Assignee
+            </button>
+          )}
+        </div>
+
+        <div>
           <h2 className="text-lg font-semibold mb-2">Code Snippet</h2>
           {form.codeSnippet.length > 0 ? (
             form.codeSnippet.map((snippet, index) => (
               <div key={snippet.id} className="mb-4">
-                <h3 className="text-md font-medium">Snippet {index + 1}</h3>
+                <h3 className="text-md font-Medium">Snippet {index + 1}</h3>
                 <CodeEditor
                   code={snippet.content || "// No code snippet available"}
                   session={session}

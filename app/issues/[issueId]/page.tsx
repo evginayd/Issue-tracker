@@ -45,6 +45,9 @@ export default async function IssueDetailPage({
       assignedBy: {
         select: { id: true, name: true, email: true, role: true },
       },
+      assignee: {
+        select: { id: true, name: true, email: true, role: true },
+      },
     },
   });
 
@@ -77,6 +80,7 @@ export default async function IssueDetailPage({
           email: issue.assignedBy.email,
           role: issue.assignedBy.role,
         },
+        assignee: issue.assignee ? [issue.assignee] : [],
       }}
     />
   );
