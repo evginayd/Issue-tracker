@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
-    const { content, language, userId, projectId, issueId } =
+    const { content, language, userId, projectId, issueId, codeSnippetId } =
       await request.json();
 
     if (!content || !language || !userId || !projectId) {
@@ -25,37 +25,66 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    let codeSnippet;
     if (issueId) {
       const issue = await prisma.issue.findUnique({ where: { id: issueId } });
       if (!issue) {
         return NextResponse.json({ error: "Issue not found" }, { status: 404 });
       }
-    }
 
-    // Create CodeSnippet
-    const codeSnippet = await prisma.codeSnippet.create({
-      data: {
-        content,
-        language,
-        userId,
-        projectId,
-        issueId: issueId || null,
-      },
-    });
+      // Check if a CodeSnippet already exists for this issueId
+      const existingSnippet = await prisma.codeSnippet.findFirst({
+        where: { issueId },
+      });
 
-    // Issue ile ilişkilendir (eğer varsa)
-    if (issueId) {
-      await prisma.issue.update({
-        where: { id: issueId },
-        data: { codeSnippetId: codeSnippet.id },
+      if (existingSnippet) {
+        // Update existing CodeSnippet
+        codeSnippet = await prisma.codeSnippet.update({
+          where: { id: existingSnippet.id },
+          data: {
+            content,
+            language,
+            userId,
+            projectId,
+            issueId,
+          },
+        });
+      } else {
+        // Create new CodeSnippet
+        codeSnippet = await prisma.codeSnippet.create({
+          data: {
+            content,
+            language,
+            userId,
+            projectId,
+            issueId,
+          },
+        });
+
+        // Update Issue with new codeSnippetId
+        await prisma.issue.update({
+          where: { id: issueId },
+          data: { codeSnippetId: codeSnippet.id },
+        });
+      }
+    } else {
+      // Create CodeSnippet without issueId
+      codeSnippet = await prisma.codeSnippet.create({
+        data: {
+          content,
+          language,
+          userId,
+          projectId,
+          issueId: null,
+        },
       });
     }
 
     return NextResponse.json({ id: codeSnippet.id }, { status: 201 });
   } catch (error) {
-    console.error("Error creating code snippet:", error);
+    console.error("Error creating/updating code snippet:", error);
     return NextResponse.json(
-      { error: `Failed to create code snippet: ${error}` },
+      { error: `Failed to create/update code snippet: ${error}` },
       { status: 500 }
     );
   }

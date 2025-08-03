@@ -10,17 +10,18 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import Link from "next/link";
 
 type User = {
   id: string;
   name?: string;
   email: string;
-  role: "DEVELOPER" | "TEAM_LEADER" | "MANAGER" | "TESTER";
+  role: "DEVELOPER" | "PROJECT_LEADER" | "MANAGER" | "TESTER";
 };
 
 type Member = {
   userId: string;
-  role: "DEVELOPER" | "TESTER" | "MANAGER" | "TEAM_LEADER";
+  role: "DEVELOPER" | "TESTER" | "MANAGER" | "PROJECT_LEADER";
 };
 
 export default function Home() {
@@ -30,6 +31,17 @@ export default function Home() {
     description: "",
     members: [{ userId: "", role: "DEVELOPER" }],
   });
+  const [selectedRole, setSelectedRole] = useState<User["role"] | "">("");
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+
+  useEffect(() => {
+    if (!selectedRole) {
+      setFilteredUsers([]);
+      return;
+    }
+    const filtered = users.filter((user) => user.role === selectedRole);
+    setFilteredUsers(filtered);
+  }, [selectedRole, users]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -79,8 +91,8 @@ export default function Home() {
       return users.filter((u) => u.role === "DEVELOPER");
     if (role === "MANAGER") return users.filter((u) => u.role === "MANAGER");
     if (role === "TESTER") return users.filter((u) => u.role === "TESTER"); // örnek eşleşme
-    if (role === "TEAM_LEADER")
-      return users.filter((u) => u.role === "TEAM_LEADER");
+    if (role === "PROJECT_LEADER")
+      return users.filter((u) => u.role === "PROJECT_LEADER");
     return [];
   };
 
@@ -165,7 +177,7 @@ export default function Home() {
                   <SelectItem value="DEVELOPER">Developer</SelectItem>
                   <SelectItem value="TESTER">Tester</SelectItem>
                   <SelectItem value="MANAGER">Manager</SelectItem>
-                  <SelectItem value="TEAM_LEADER">Team Leader</SelectItem>
+                  <SelectItem value="PROJECT_LEADER">Team Leader</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -214,7 +226,9 @@ export default function Home() {
         </button>
       </div>
 
-      <Button onClick={handleSubmit}>Create Project</Button>
+      <Button onClick={handleSubmit}>
+        <Link href={`/home`}>Create Project</Link>
+      </Button>
     </div>
   );
 }

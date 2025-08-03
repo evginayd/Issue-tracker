@@ -2,13 +2,16 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { Member } from "better-auth/plugins";
+import { headers } from "next/headers";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const resolvedParams = await params; // params'ı asenkron olarak çöz
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
@@ -49,7 +52,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const resolvedParams = await params;
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
   if (!session || session.user.role?.toUpperCase() !== "MANAGER") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
@@ -151,33 +156,58 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const resolvedParams = await params; // params'ı asenkron olarak çöz
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session || session.user.role?.toUpperCase() !== "MANAGER") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
+  const { id: projectId } = await params;
 
   try {
-    const project = await prisma.project.findUnique({
-      where: { id: resolvedParams.id },
+    const session = await auth.api.getSession({
+      headers: await headers(),
     });
+    if (!session || session.user.role?.toUpperCase() !== "MANAGER") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
+    // Check project and associated records
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        issues: { select: { id: true, title: true } },
+      },
+    });
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    if (project.issues.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Cannot delete project with existing issues",
+          issueIds: project.issues.map((issue) => ({
+            id: issue.id,
+            title: issue.title,
+          })),
+        },
+        { status: 400 }
+      );
+    }
+
+    // Delete project (issues, members, and code snippets handled by onDelete: Cascade)
     await prisma.project.delete({
-      where: { id: resolvedParams.id },
+      where: { id: projectId },
     });
 
     return NextResponse.json(
       { message: "Project deleted successfully" },
       { status: 200 }
     );
-  } catch (error: unknown) {
-    console.error("Delete project error:", error);
+  } catch (error) {
+    if (error === "P2003") {
+      return NextResponse.json(
+        { error: "Cannot delete project due to related records" },
+        { status: 400 }
+      );
+    }
     return NextResponse.json(
-      { error: "Failed to delete project: " + error },
+      { error: "Failed to delete project" },
       { status: 500 }
     );
   }

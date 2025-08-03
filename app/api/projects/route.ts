@@ -10,7 +10,6 @@ export async function POST(req: Request) {
     const session = await auth.api.getSession({
       headers: await headers(),
     });
-
     if (!session?.user.role || session.user.role !== "MANAGER") {
       return NextResponse.json(
         { error: "Only managers can create projects" },

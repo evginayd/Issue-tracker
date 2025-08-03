@@ -143,22 +143,72 @@ export default function IssueTable({ session }: Props) {
     router.push(`/issues/new?projectId=${projectId}`);
   };
 
+  const handleDeleteCodeSnippet = async (codeSnippetId: string) => {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this code snippet?"
+    );
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`/api/code-snippets/${codeSnippetId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(`Failed to delete code snippet: ${data.error}`);
+        return;
+      }
+
+      toast.success("Code snippet deleted successfully");
+      // Optionally refresh issues to reflect updated codeSnippetId
+      const url = `/api/issues?projectId=${projectId}`;
+      const resIssues = await fetch(url, { credentials: "include" });
+      if (resIssues.ok) {
+        const data: Issue[] = await resIssues.json();
+        setIssues(data);
+        setFilteredIssues(data);
+      }
+    } catch (error) {
+      toast.error("Failed to delete code snippet");
+    }
+  };
+
   const handleDelete = async (issueId: string) => {
     const confirmed = window.confirm(
       "Are you sure you want to delete this issue?"
     );
     if (!confirmed) return;
 
-    const res = await fetch(`/api/issues/${issueId}`, {
-      method: "DELETE",
-    });
+    try {
+      const res = await fetch(`/api/issues/${issueId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
 
-    if (!res.ok) {
-      const data = await res.json();
-      console.error("Delete failed:", data.error);
-    } else {
-      // Silme başarılıysa sayfayı yenile
+      if (!res.ok) {
+        const data = await res.json();
+        if (data.error === "Cannot delete issue with associated code snippet") {
+          toast.error(
+            `Cannot delete issue: Associated code snippet must be deleted first.`,
+            {
+              action: {
+                label: "Delete Code Snippet",
+                onClick: () => handleDeleteCodeSnippet(data.codeSnippetId),
+              },
+            }
+          );
+        } else {
+          toast.error(`Failed to delete issue: ${data.error}`);
+        }
+        return;
+      }
+
+      toast.success("Issue deleted successfully");
       window.location.reload();
+    } catch (error) {
+      toast.error("Failed to delete issue");
     }
   };
 
@@ -190,9 +240,9 @@ export default function IssueTable({ session }: Props) {
             <SelectContent>
               <SelectItem value="ALL">All Categories</SelectItem>
               <SelectItem value="DESIGN">Design</SelectItem>
-              <SelectItem value="DEVELOPMENT">Development</SelectItem>
-              <SelectItem value="TESTING">Testing</SelectItem>
-              <SelectItem value="BUG">Bug</SelectItem>
+              <SelectItem value="BACKEND">Backend</SelectItem>
+              <SelectItem value="FRONTEND">Frontend</SelectItem>
+              <SelectItem value="SUPPORT">Support</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -206,75 +256,83 @@ export default function IssueTable({ session }: Props) {
           )}
         </div>
       </div>
-      <Table>
-        <TableCaption>Issues for {projectName}</TableCaption>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Title</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Priority</TableHead>
-            <TableHead>Due Date</TableHead>
-            <TableHead>Assigned By</TableHead>
-            <TableHead>Assignee</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filteredIssues.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={8} className="text-center text-gray-500">
-                No issues found for this project.
-              </TableCell>
-            </TableRow>
-          ) : (
-            filteredIssues.map((issue) => (
-              <TableRow key={issue.id}>
-                <TableCell className="font-medium">{issue.title}</TableCell>
-                <TableCell>{issue.status}</TableCell>
-                <TableCell>{issue.category}</TableCell>
-                <TableCell>{issue.priority || "Not set"}</TableCell>
-                <TableCell>
-                  {issue.dueDate
-                    ? new Date(issue.dueDate).toLocaleDateString()
-                    : "Not set"}
-                </TableCell>
-                <TableCell>{issue.assignedBy.name}</TableCell>
-                <TableCell>{issue.assignee?.name || "Not assigned"}</TableCell>
-                <TableCell className="text-right">
-                  <div className="flex gap-2 justify-end flex-wrap">
-                    <Link
-                      href={`/issues/${issue.id}?projectId=${issue.projectId}`}
-                    >
-                      <Button variant="secondary" size="sm">
-                        View Issue
-                      </Button>
-                    </Link>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        router.push(
-                          `/issues/code-editor?projectId=${projectId}&issueId=${issue.id}`
-                        )
-                      }
-                    >
-                      Edit Code
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDelete(issue.id)}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </TableCell>
+      <div className="w-full max-w-7xl mx-auto">
+        <div className="max-h-[550px] overflow-y-auto">
+          <Table>
+            <TableCaption>Issues for {projectName}</TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Due Date</TableHead>
+                <TableHead>Assigned By</TableHead>
+                <TableHead>Assignee</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            </TableHeader>
+            <TableBody>
+              {filteredIssues.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-gray-500">
+                    No issues found for this project.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredIssues.map((issue, index) => (
+                  <TableRow key={issue.id}>
+                    <TableCell>{index + 1}</TableCell>
+                    <TableCell className="font-medium">{issue.title}</TableCell>
+                    <TableCell>{issue.status}</TableCell>
+                    <TableCell>{issue.category}</TableCell>
+                    <TableCell>{issue.priority || "Not set"}</TableCell>
+                    <TableCell>
+                      {issue.dueDate
+                        ? new Date(issue.dueDate).toLocaleDateString()
+                        : "Not set"}
+                    </TableCell>
+                    <TableCell>{issue.assignedBy.name}</TableCell>
+                    <TableCell>
+                      {issue.assignee?.name || "Not assigned"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex gap-2 justify-end flex-wrap">
+                        <Link
+                          href={`/issues/${issue.id}?projectId=${issue.projectId}`}
+                        >
+                          <Button variant="secondary" size="sm">
+                            View Issue
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            router.push(
+                              `/issues/code-editor?projectId=${projectId}&issueId=${issue.id}`
+                            )
+                          }
+                        >
+                          Edit Code
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => handleDelete(issue.id)}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
     </div>
   );
 }

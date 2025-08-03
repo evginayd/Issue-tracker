@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { Category, Priority, Status } from "@prisma/client";
 
 export async function GET(request: Request) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -88,12 +89,73 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { title, description, projectId, assignedById, codeSnippetId } =
-      await request.json();
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session || !session.user.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
 
+    const {
+      title,
+      description,
+      status,
+      priority,
+      category,
+      dueDate,
+      labels,
+      projectId,
+      assignedById,
+      assigneeId,
+      codeSnippetId,
+    } = await request.json();
+
+    // Validate required fields
     if (!title || !projectId || !assignedById) {
       return NextResponse.json(
-        { error: "Missing required fields" },
+        { error: "Title, projectId, and assignedById are required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate enum fields
+    const validStatuses = Object.values(Status);
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        {
+          error: `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
+    if (priority && !Object.values(Priority).includes(priority)) {
+      return NextResponse.json(
+        {
+          error: `Invalid priority. Must be one of: ${Object.values(
+            Priority
+          ).join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
+    if (!Object.values(Category).includes(category)) {
+      return NextResponse.json(
+        {
+          error: `Invalid category. Must be one of: ${Object.values(
+            Category
+          ).join(", ")}`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Validate dueDate
+    if (dueDate && isNaN(new Date(dueDate).getTime())) {
+      return NextResponse.json({ error: "Invalid dueDate" }, { status: 400 });
+    }
+
+    // Validate labels
+    if (labels && !Array.isArray(labels)) {
+      return NextResponse.json(
+        { error: "Labels must be an array" },
         { status: 400 }
       );
     }
@@ -101,20 +163,48 @@ export async function POST(request: Request) {
     // Check project existence
     const project = await prisma.project.findUnique({
       where: { id: projectId },
+      include: { members: { select: { userId: true } } },
     });
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Check user existence
-    const user = await prisma.user.findUnique({
+    // Check assignedById existence
+    const assignedBy = await prisma.user.findUnique({
       where: { id: assignedById },
     });
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    if (!assignedBy) {
+      return NextResponse.json(
+        { error: "AssignedBy user not found" },
+        { status: 404 }
+      );
     }
 
-    // Check CodeSnippet (optional)
+    // Check assigneeId existence and project membership if provided
+    let assignee = null;
+    if (assigneeId) {
+      assignee = await prisma.user.findUnique({
+        where: { id: assigneeId },
+      });
+      if (!assignee) {
+        return NextResponse.json(
+          { error: "Assignee not found" },
+          { status: 404 }
+        );
+      }
+      // Optional: Ensure assignee is a project member
+      const isMember = project.members.some(
+        (member) => member.userId === assigneeId
+      );
+      if (!isMember) {
+        return NextResponse.json(
+          { error: "Assignee must be a project member" },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Check codeSnippetId existence if provided
     if (codeSnippetId) {
       const codeSnippet = await prisma.codeSnippet.findUnique({
         where: { id: codeSnippetId },
@@ -131,19 +221,30 @@ export async function POST(request: Request) {
     const issue = await prisma.issue.create({
       data: {
         title,
-        description,
-        projectId,
-        assignedById,
-        codeSnippetId: codeSnippetId || null,
-        status: "OPEN",
-        priority: "MEDIUM",
-        category: "DESIGN",
+        description: description || null,
+        status: status,
+        priority: priority ? priority : null,
+        category: category ? category : null,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        labels: labels || [],
+        project: { connect: { id: projectId } },
+        assignedBy: { connect: { id: assignedById } },
+        assignee: assigneeId ? { connect: { id: assigneeId } } : undefined,
+        codeSnippet: codeSnippetId
+          ? { connect: { id: codeSnippetId } }
+          : undefined,
+      },
+      include: {
+        project: { select: { id: true, name: true } },
+        assignedBy: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true, email: true } },
+        codeSnippet: { select: { id: true, content: true } },
       },
     });
 
     return NextResponse.json(issue, { status: 201 });
   } catch (error) {
-    console.error("Error creating issue:", error);
+    console.error("Create issue error:", error);
     return NextResponse.json(
       { error: "Failed to create issue" },
       { status: 500 }

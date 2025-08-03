@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -95,7 +89,7 @@ model Issue {
   priority      Priority     @default(MEDIUM)
   category      Category     @default(DESIGN)
   dueDate       DateTime?
-  labels        String[]
+  labels        String[]     @default([])
   projectId     String
   project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assignedById  String
@@ -106,7 +100,7 @@ model Issue {
   assignee      User?        @relation("Assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   originalCode  String?
   codeSnippetId String?      @unique
-  codeSnippet   CodeSnippet? @relation(fields: [codeSnippetId], references: [id])
+  codeSnippet   CodeSnippet? @relation(fields: [codeSnippetId], references: [id], onDelete: Cascade)
 
   @@map("issue")
 }
@@ -119,9 +113,11 @@ model CodeSnippet {
   projectId String
   createdAt DateTime @default(now())
   issue     Issue?   @relation
-  issueId   String?
-  user      User     @relation(fields: [userId], references: [id])
-  project   Project  @relation(fields: [projectId], references: [id])
+  issueId   String?  @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("code_snippet")
 }
 
 model Session {

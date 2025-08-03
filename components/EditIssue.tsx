@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,6 +14,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import CodeEditor from "@/components/CodeEditor";
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
 type Status = "OPEN" | "IN_PROGRESS" | "CLOSED";
@@ -39,6 +40,7 @@ type User = {
   name: string | null;
   email: string;
   role: Role;
+  specialty: "FRONTEND" | "BACKEND" | "DESIGN" | "SUPPORT" | null;
 };
 
 type Issue = {
@@ -52,7 +54,8 @@ type Issue = {
   assignedById: string;
   codeSnippet: { id: string; content: string }[];
   assignedBy: User;
-  assignee: User[]; // Added for multiple assignees
+  assigneeId?: string | null;
+  assignee?: User | null;
 };
 
 type Props = {
@@ -63,24 +66,41 @@ type Props = {
 export default function EditIssue({ session, issue }: Props) {
   const [form, setForm] = useState<Issue>({
     ...issue,
-    assignee: issue.assignee || [],
+    assigneeId: issue.assigneeId || null,
+    assignee: issue.assignee || null,
   });
   const [isEditing, setIsEditing] = useState(false);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
+  const [assigneeRole, setAssigneeRole] = useState<Role>("DEVELOPER");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
   const userRole = session?.user?.role?.toUpperCase();
 
-  // Fetch available users for assignment
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const response = await fetch(`/api/users?projectId=${issue.projectId}`);
-        if (!response.ok) throw new Error("Failed to fetch users");
-        const users: User[] = await response.json();
-        setAvailableUsers(users);
+        const response = await fetch(`/api/projects/${issue.projectId}`, {
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Failed to fetch project members");
+        const project = await response.json();
+        const memberIds = project.members.map(
+          (m: { userId: string }) => m.userId
+        );
+        const usersResponse = await fetch("/api/users", {
+          credentials: "include",
+        });
+        if (!usersResponse.ok) throw new Error("Failed to fetch users");
+        const users: User[] = await usersResponse.json();
+        setAvailableUsers(
+          users
+            .filter((u) => memberIds.includes(u.id))
+            .map((u) => ({ ...u, specialty: u.specialty || null }))
+        );
       } catch (error) {
         console.error("Fetch users error:", error);
-        toast.error("Failed to load users for assignment");
+        toast.error("Failed to load project members");
       }
     };
     if (isEditing) fetchUsers();
@@ -93,34 +113,22 @@ export default function EditIssue({ session, issue }: Props) {
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSelectChange = (name: string, value: string) => {
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleAssigneeChange = (index: number, userId: string) => {
-    const newAssignees = [...form.assignee];
-    newAssignees[index] = availableUsers.find((user) => user.id === userId)!;
-    setForm((prev) => ({ ...prev, assignee: newAssignees }));
-  };
-
-  const addAssignee = () => {
-    const available = availableUsers.find(
-      (user) => !form.assignee.some((a) => a.id === user.id)
-    );
-    if (available) {
+  const handleSelectChange = (name: keyof Issue, value: string) => {
+    if (name === "category") {
       setForm((prev) => ({
         ...prev,
-        assignee: [...prev.assignee, available],
+        [name]: value as Category,
+        assigneeId: null,
       }));
     } else {
-      toast.error("No more users available to assign");
+      setForm((prev) => ({ ...prev, [name]: value }));
     }
   };
 
-  const removeAssignee = (index: number) => {
+  const handleAssigneeChange = (value: string) => {
     setForm((prev) => ({
       ...prev,
-      assignee: prev.assignee.filter((_, i) => i !== index),
+      assigneeId: value === "none" ? null : value,
     }));
   };
 
@@ -146,7 +154,7 @@ export default function EditIssue({ session, issue }: Props) {
           status: form.status,
           priority: form.priority,
           category: form.category,
-          assignee: form.assignee.map((a) => a.id), // Send assignee IDs
+          assignedToId: form.assigneeId,
         }),
       });
 
@@ -167,6 +175,10 @@ export default function EditIssue({ session, issue }: Props) {
       toast.error(`Unexpected error: ${error}`);
     }
   };
+
+  const filteredAssignees = assigneeRole
+    ? availableUsers.filter((u) => u.role === assigneeRole)
+    : availableUsers;
 
   return (
     <div className="max-w-4xl mx-auto mt-12 p-6 rounded-2xl shadow-md border border-gray-200">
@@ -269,8 +281,8 @@ export default function EditIssue({ session, issue }: Props) {
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="FRONTEND">Frontend</SelectItem>
                   <SelectItem value="BACKEND">Backend</SelectItem>
+                  <SelectItem value="FRONTEND">Frontend</SelectItem>
                   <SelectItem value="DESIGN">Design</SelectItem>
                   <SelectItem value="SUPPORT">Support</SelectItem>
                 </SelectContent>
@@ -289,69 +301,76 @@ export default function EditIssue({ session, issue }: Props) {
           </div>
         </div>
 
-        <div>
-          <h2 className="text-lg font-semibold">Assignees</h2>
-          {form.assignee.length > 0 ? (
-            form.assignee.map((assignee, index) => (
-              <div key={index} className="flex items-center gap-2 mb-2">
-                {isEditing ? (
-                  <Select
-                    value={assignee.id}
-                    onValueChange={(value) =>
-                      handleAssigneeChange(index, value)
-                    }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select a user" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableUsers.length > 0 ? (
-                        availableUsers.map((user) => (
-                          <SelectItem key={user.id} value={user.id}>
-                            {user.name || user.email}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <div className="text-gray-500 p-2 text-sm">
-                          No users available
-                        </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-gray-700 dark:text-gray-300">
-                    {assignee.name || assignee.email}
-                  </p>
-                )}
-                {isEditing && form.assignee.length > 1 && (
-                  <button
-                    onClick={() => removeAssignee(index)}
-                    className="text-red-600 font-bold px-2"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))
-          ) : (
-            <p className="text-gray-700 dark:text-gray-300">No assignees</p>
-          )}
-          {isEditing && (
-            <button
-              onClick={addAssignee}
-              className="mt-2 text-sm text-blue-600 hover:underline"
-            >
-              + Add Assignee
-            </button>
-          )}
-        </div>
+        {/* Assignee Role + Assignee */}
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <Label htmlFor="assigneeRole" className="block font-medium mb-1">
+              Assignee Role
+            </Label>
+            {isEditing ? (
+              <Select
+                value={assigneeRole}
+                onValueChange={(value) => setAssigneeRole(value as Role)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DEVELOPER">Developer</SelectItem>
+                  <SelectItem value="TESTER">Tester</SelectItem>
+                  <SelectItem value="MANAGER">Manager</SelectItem>
+                  <SelectItem value="PROJECT_LEADER">Team Leader</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-gray-700 dark:text-gray-300">
+                {assigneeRole || "No role selected"}
+              </p>
+            )}
+          </div>
 
+          <div className="flex-1">
+            <Label htmlFor="assigneeId" className="block font-medium mb-1">
+              Assignee
+            </Label>
+            {isEditing ? (
+              <Select
+                value={form.assigneeId || ""}
+                onValueChange={handleAssigneeChange}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a user to assign" />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredAssignees.length > 0 ? (
+                    filteredAssignees.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.name || user.email}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="text-gray-500 p-2 text-sm">
+                      No users available for this role
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-gray-700 dark:text-gray-300">
+                {issue.assignee?.name ||
+                  issue.assignee?.email ||
+                  form.assigneeId ||
+                  "No assignee"}
+              </p>
+            )}
+          </div>
+        </div>
         <div>
           <h2 className="text-lg font-semibold mb-2">Code Snippet</h2>
           {form.codeSnippet.length > 0 ? (
             form.codeSnippet.map((snippet, index) => (
               <div key={snippet.id} className="mb-4">
-                <h3 className="text-md font-Medium">Snippet {index + 1}</h3>
+                <h3 className="text-md font-medium">Snippet {index + 1}</h3>
                 <CodeEditor
                   code={snippet.content || "// No code snippet available"}
                   session={session}
@@ -363,7 +382,7 @@ export default function EditIssue({ session, issue }: Props) {
             ))
           ) : (
             <p className="text-gray-700 dark:text-gray-300">
-              No code snippet available.
+              No code snippet available
             </p>
           )}
         </div>

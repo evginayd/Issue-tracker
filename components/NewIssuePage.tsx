@@ -1,4 +1,5 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -42,7 +43,7 @@ type User = {
   id: string;
   name?: string;
   email: string;
-  role: "DEVELOPER" | "TEAM_LEADER" | "MANAGER" | "TESTER";
+  role: "DEVELOPER" | "PROJECT_LEADER" | "MANAGER" | "TESTER";
 };
 
 type FormData = {
@@ -50,12 +51,12 @@ type FormData = {
   description?: string;
   status: "OPEN" | "IN_PROGRESS" | "CLOSED";
   priority?: "LOW" | "MEDIUM" | "HIGH";
-  category: "DESIGN" | "DEVELOPMENT" | "TESTING" | "BUG";
+  category: "FRONTEND" | "BACKEND" | "DESIGN" | "SUPPORT";
   dueDate?: string;
   labels: string[];
   projectId: string;
   assignedById: string;
-  assigneeId?: string;
+  assigneeId?: string | null;
 };
 
 type Props = {
@@ -67,23 +68,36 @@ export default function NewIssuePage({ session }: Props) {
   const projectId = searchParams.get("projectId");
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
+  const [assigneeRole, setAssigneeRole] = useState<
+    "DEVELOPER" | "PROJECT_LEADER" | "MANAGER" | "TESTER" | ""
+  >("");
   const [formData, setFormData] = useState<FormData>({
+    labels: [],
     title: "",
     description: "",
     status: "OPEN",
-    priority: "MEDIUM",
+    priority: "LOW",
     category: "DESIGN",
-    dueDate: "",
-    labels: [],
     projectId: projectId || "",
     assignedById: session?.user?.id || "",
-    assigneeId: "",
+  });
+  const [project, setProject] = useState({
+    name: "",
+    description: "",
+    members: [{ userId: "", role: "DEVELOPER" }],
   });
 
   useEffect(() => {
     console.log("Session in NewIssuePage:", JSON.stringify(session, null, 2));
     console.log("Project ID:", projectId);
     console.log("AssignedById:", formData.assignedById);
+    console.log(
+      "sessionStorage.codeSnippet:",
+      sessionStorage.getItem("codeSnippet")
+    );
+
+    // Clear sessionStorage on mount to prevent stale data
+    sessionStorage.removeItem("codeSnippet");
 
     if (!projectId) {
       toast.error(
@@ -99,10 +113,15 @@ export default function NewIssuePage({ session }: Props) {
 
     // sessionStorage'dan kod snippet'ini al
     const savedCode = sessionStorage.getItem("codeSnippet");
-    if (savedCode) {
+    if (
+      savedCode &&
+      savedCode !== "// No code snippet available" &&
+      !formData.description?.includes(savedCode)
+    ) {
       setFormData((prev) => ({
         ...prev,
-        description: (prev.description || "") + "\n" + savedCode,
+        description:
+          (prev.description || "") + "\n```javascript\n" + savedCode + "\n```",
       }));
       sessionStorage.removeItem("codeSnippet"); // Tek kullanımlık, temizle
     }
@@ -114,6 +133,7 @@ export default function NewIssuePage({ session }: Props) {
         });
         if (!res.ok) throw new Error(await res.text());
         const project = await res.json();
+        setProject(project);
         const memberIds = project.members.map(
           (m: { userId: string }) => m.userId
         );
@@ -149,7 +169,7 @@ export default function NewIssuePage({ session }: Props) {
   const handleSelectChange = (name: keyof FormData, value: string) => {
     setFormData((prev) => ({
       ...prev,
-      [name]: value === "none" ? undefined : value,
+      [name]: value === "none" ? null : value,
     }));
   };
 
@@ -163,7 +183,6 @@ export default function NewIssuePage({ session }: Props) {
       toast.error("Title is required");
       return;
     }
-
     try {
       const res = await fetch("/api/issues", {
         method: "POST",
@@ -182,11 +201,16 @@ export default function NewIssuePage({ session }: Props) {
       }
 
       toast.success("Issue created successfully!");
+      sessionStorage.removeItem("codeSnippet"); // Clear sessionStorage after successful submission
       router.push(`/issues?projectId=${projectId}`);
     } catch (error: unknown) {
       toast.error("Unexpected error: " + error);
     }
   };
+
+  const filteredAssignees = assigneeRole
+    ? users.filter((u) => u.role === assigneeRole)
+    : users;
 
   if (!session || !session.user?.id) {
     return (
@@ -199,7 +223,9 @@ export default function NewIssuePage({ session }: Props) {
   return (
     <div className="max-w-3xl mx-auto mt-12 p-6 rounded-2xl shadow-md border border-gray-200">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Create New Issue</h1>
+        <h1 className="text-2xl font-bold">
+          Create New Issue for {project.name}
+        </h1>
         <div className="flex gap-2">
           <Button asChild variant="secondary">
             <Link href={`/issues?projectId=${projectId}`}>Cancel</Link>
@@ -208,21 +234,44 @@ export default function NewIssuePage({ session }: Props) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="mb-4">
-          <Label htmlFor="title" className="block font-medium mb-1">
-            Title
-          </Label>
-          <Input
-            id="title"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="Enter issue title"
-            required
-          />
+        {/* Title + Priority */}
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <Label htmlFor="title" className="block font-medium mb-1">
+              Title
+            </Label>
+            <Input
+              id="title"
+              name="title"
+              value={formData.title}
+              onChange={handleChange}
+              placeholder="Enter issue title"
+              required
+            />
+          </div>
+
+          <div className="w-1/3">
+            <Label htmlFor="priority" className="block font-medium mb-1">
+              Priority
+            </Label>
+            <Select
+              value={formData.priority || ""}
+              onValueChange={(value) => handleSelectChange("priority", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="LOW">Low</SelectItem>
+                <SelectItem value="MEDIUM">Medium</SelectItem>
+                <SelectItem value="HIGH">High</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <div className="mb-4">
+        {/* Description */}
+        <div>
           <Label htmlFor="description" className="block font-medium mb-1">
             Description
           </Label>
@@ -232,120 +281,135 @@ export default function NewIssuePage({ session }: Props) {
             value={formData.description || ""}
             onChange={handleChange}
             placeholder="Enter issue description (Markdown supported)"
-            className="min-h-[200px]"
+            className="min-h-[100px]"
           />
         </div>
 
-        <div className="mb-4">
-          <Label htmlFor="status" className="block font-medium mb-1">
-            Status
-          </Label>
-          <Select
-            value={formData.status}
-            onValueChange={(value) => handleSelectChange("status", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="OPEN">Open</SelectItem>
-              <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-              <SelectItem value="CLOSED">Closed</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Status + Category */}
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <Label htmlFor="status" className="block font-medium mb-1">
+              Status
+            </Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => handleSelectChange("status", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="OPEN">Open</SelectItem>
+                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
+                <SelectItem value="CLOSED">Closed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex-1">
+            <Label htmlFor="category" className="block font-medium mb-1">
+              Category
+            </Label>
+            <Select
+              value={formData.category}
+              onValueChange={(value) => handleSelectChange("category", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DESIGN">Design</SelectItem>
+                <SelectItem value="FRONTEND">Frontend</SelectItem>
+                <SelectItem value="BACKEND">Backend</SelectItem>
+                <SelectItem value="SUPPORT">Support</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <div className="mb-4">
-          <Label htmlFor="priority" className="block font-medium mb-1">
-            Priority
-          </Label>
-          <Select
-            value={formData.priority || ""}
-            onValueChange={(value) => handleSelectChange("priority", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="LOW">Low</SelectItem>
-              <SelectItem value="MEDIUM">Medium</SelectItem>
-              <SelectItem value="HIGH">High</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Due Date + Labels */}
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <Label htmlFor="dueDate" className="block font-medium mb-1">
+              Due Date
+            </Label>
+            <Input
+              id="dueDate"
+              name="dueDate"
+              type="date"
+              value={formData.dueDate || ""}
+              onChange={handleChange}
+            />
+          </div>
+
+          <div className="flex-1">
+            <Label htmlFor="labels" className="block font-medium mb-1">
+              Labels
+            </Label>
+            <Input
+              id="labels"
+              name="labels"
+              value={formData.labels.join(", ")}
+              onChange={handleChange}
+              placeholder="Enter labels (comma-separated)"
+            />
+          </div>
         </div>
 
-        <div className="mb-4">
-          <Label htmlFor="category" className="block font-medium mb-1">
-            Category
-          </Label>
-          <Select
-            value={formData.category}
-            onValueChange={(value) => handleSelectChange("category", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="DESIGN">Design</SelectItem>
-              <SelectItem value="DEVELOPMENT">Development</SelectItem>
-              <SelectItem value="TESTING">Testing</SelectItem>
-              <SelectItem value="BUG">Bug</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* Assignee Role + Assignee */}
+        <div className="flex gap-4">
+          <div className="flex-1">
+            <Label htmlFor="assigneeRole" className="block font-medium mb-1">
+              Assignee Role
+            </Label>
+            <Select
+              value={assigneeRole}
+              onValueChange={(value) =>
+                setAssigneeRole(value as typeof assigneeRole)
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select role" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DEVELOPER">Developer</SelectItem>
+                <SelectItem value="TESTER">Tester</SelectItem>
+                <SelectItem value="MANAGER">Manager</SelectItem>
+                <SelectItem value="PROJECT_LEADER">Team Leader</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <div className="mb-4">
-          <Label htmlFor="dueDate" className="block font-medium mb-1">
-            Due Date
-          </Label>
-          <Input
-            id="dueDate"
-            name="dueDate"
-            type="date"
-            value={formData.dueDate || ""}
-            onChange={handleChange}
-          />
-        </div>
-
-        <div className="mb-4">
-          <Label htmlFor="labels" className="block font-medium mb-1">
-            Labels
-          </Label>
-          <Input
-            id="labels"
-            name="labels"
-            value={formData.labels.join(", ")}
-            onChange={handleChange}
-            placeholder="Enter labels (comma-separated)"
-          />
-        </div>
-
-        <div className="mb-4">
-          <Label htmlFor="assigneeId" className="block font-medium mb-1">
-            Assignee
-          </Label>
-          <Select
-            value={formData.assigneeId || "none"}
-            onValueChange={(value) => handleSelectChange("assigneeId", value)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select assignee" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">None</SelectItem>
-              {users.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name || user.email}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex-1">
+            <Label htmlFor="assigneeId" className="block font-medium mb-1">
+              Assignee
+            </Label>
+            <Select
+              value={formData.assigneeId || ""}
+              onValueChange={(value) => handleSelectChange("assigneeId", value)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a user to assign" />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredAssignees.length > 0 ? (
+                  filteredAssignees.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name || user.email}
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="text-gray-500 p-2 text-sm">
+                    No users available for this role
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex gap-2 mt-4">
-          <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
-            Create Issue
-          </Button>
+          <Button type="submit">Create Issue</Button>
         </div>
       </form>
     </div>

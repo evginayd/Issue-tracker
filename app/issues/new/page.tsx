@@ -3,29 +3,6 @@ import { headers } from "next/headers";
 import NewIssuePage from "@/components/NewIssuePage";
 import SignUp from "../../(auth)/sign-up/page";
 
-type Session = {
-  user: {
-    role?: string;
-    id: string;
-    email: string;
-    emailVerified: boolean;
-    name: string;
-    createdAt: Date;
-    updatedAt: Date;
-    image?: string | null;
-  };
-  session: {
-    id: string;
-    userId: string;
-    expiresAt: Date;
-    createdAt: Date;
-    updatedAt: Date;
-    token: string;
-    ipAddress?: string | null;
-    userAgent?: string | null;
-  };
-};
-
 export default async function Page() {
   const session = await auth.api.getSession({
     headers: await headers(),

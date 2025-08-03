@@ -190,7 +190,7 @@ export default function ProjectDetails({ project, session }: Props) {
                   <SelectItem value="DEVELOPER">Developer</SelectItem>
                   <SelectItem value="TESTER">Tester</SelectItem>
                   <SelectItem value="MANAGER">Manager</SelectItem>
-                  <SelectItem value="TEAM_LEADER">Team Leader</SelectItem>
+                  <SelectItem value="PROJECT_LEADER">Team Leader</SelectItem>
                 </SelectContent>
               </Select>
 
