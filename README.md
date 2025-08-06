@@ -15,7 +15,7 @@ Manage tasks, assign issues, set priorities, and track project progress.
 - **Frontend:** Next.js (App Router), React Hook Form, Zod
 - **Backend:** Next.js API Routes
 - **Database:** PostgreSQL + Prisma
-- **Auth:** NextAuth.js (Credentials)
+- **Auth:** BetterAuth.js (Credentials)
 - **UI:** Tailwind CSS + ShadCN UI
 
 ## ⚙️ Setup
