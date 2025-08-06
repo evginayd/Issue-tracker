@@ -11,7 +11,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
-import { Combobox } from "@/components/ui/combo-box";
 import { Search } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -44,7 +43,6 @@ type Session = {
 
 export default function ProjectTable({ session }: { session: Session | null }) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const router = useRouter();
 
@@ -121,7 +119,6 @@ export default function ProjectTable({ session }: { session: Session | null }) {
         }
         return;
       }
-
       toast.success("Project deleted successfully");
       window.location.reload();
     } catch (error) {
@@ -134,13 +131,7 @@ export default function ProjectTable({ session }: { session: Session | null }) {
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
 
-    const matchesCategory = !selectedCategory
-      ? true
-      : project.description
-          ?.toLowerCase()
-          .includes(selectedCategory.toLowerCase());
-
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   return (
@@ -153,13 +144,6 @@ export default function ProjectTable({ session }: { session: Session | null }) {
             className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
-        <div className="w-full max-w-sm">
-          <Combobox
-            value={selectedCategory}
-            onChange={(val) => setSelectedCategory(val)}
           />
         </div>
 
