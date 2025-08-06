@@ -4,7 +4,7 @@ A simple issue tracking system built with **Next.js**, **Prisma**, and **Postgre
 Manage tasks, assign issues, set priorities, and track project progress.
 
 ## 🚀 Features
-- User authentication (NextAuth.js + JWT)
+- User authentication (BetterAuth)
 - Create, update, delete issues
 - Assign issues to users
 - Priority, status, due date, and labels
